@@ -1,5 +1,9 @@
 export default class StreamerData {
 
+  static HOURS_STREAMED_EXPONENT = 0.8;
+  static AVERAGE_VIEWERS_EXPONENT = 1.2;
+  static VIEWER_PEAK_EXPONENT = 0.5;
+
   lastCheck: number;
 
   name: string;
@@ -27,7 +31,9 @@ export default class StreamerData {
   }
 
   getScore(): number {
-    return this.hoursStreamed * this.averageViewers;
+    return (this.hoursStreamed ^ StreamerData.HOURS_STREAMED_EXPONENT)
+      + (this.averageViewers ^ StreamerData.AVERAGE_VIEWERS_EXPONENT)
+      + (this.viewerPeak ^ StreamerData.VIEWER_PEAK_EXPONENT);
   }
 
   serialize(): object {
