@@ -30,4 +30,15 @@ export default class StreamerData {
     return this.hoursStreamed * this.averageViewers;
   }
 
+  serialize(): object {
+    return {
+      name: this.name,
+      hoursStreamed: this.hoursStreamed,
+      averageViewers: this.averageViewers,
+      viewerPeak: this.viewerPeak,
+      hoursWatched: this.hoursWatched,
+      lastCheck: this.lastCheck,
+    };
+  }
+
 }

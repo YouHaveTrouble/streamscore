@@ -28,7 +28,14 @@
         <td>{{ streamer.score.toFixed(2) }}</td>
         <td class="tools">
           <button
-            @click="getStreamerDataFromApi(streamer.name)"
+            @click="async () => {
+               const streamerData = await getStreamerDataFromApi(streamer.name);
+                if (streamerData === null) {
+                  console.error('Streamer named \'%s\' not found'.replace('%s', streamer.name));
+                  return;
+                }
+                streamers[streamer.name] = streamerData;
+            }"
             :disabled="updates.has(streamer.name.toLowerCase())"
             title="Update streamer data"
           >↻</button>
@@ -52,7 +59,11 @@ export default defineComponent({
   watch: {
     streamers: {
       handler() {
-        localStorage.setItem("streamers", JSON.stringify(this.streamers));
+        const serializedStreamers = {} as { [key: string]: unknown };
+        for (const [name, data] of Object.entries(this.streamers)) {
+          serializedStreamers[name] = data.serialize();
+        }
+        localStorage.setItem("streamers", JSON.stringify(serializedStreamers));
         this.sortedStreamers = Object.values(this.streamers).toSorted((a, b) => b.score - a.score);
       },
       deep: true
@@ -74,20 +85,13 @@ export default defineComponent({
       const name = this.addStreamerName.toLowerCase();
       this.addStreamerName = "";
       console.log("Adding streamer", name);
-      const request = await fetch(`https://twitchtracker.com/api/channels/summary/${name}`);
-      const response = await request.json();
 
-      if (JSON.stringify(response) === "{}") {
-        alert("Streamer named \"%s\" not found".replace("%s", name));
+      const streamerData = await this.getStreamerDataFromApi(name);
+      if (streamerData === null) {
+        console.error("Streamer named \"%s\" not found".replace("%s", name));
         return;
       }
-
-      const minutesStreamed = response?.minutes_streamed ?? 0;
-      const hoursStreamed = minutesStreamed / 60;
-      const averageViewers = response?.avg_viewers ?? 0;
-      const viewerPeak = response?.viewer_peak ?? 0;
-      const hoursWatched = response?.hours_watched ?? 0;
-      this.streamers[name] = new StreamerData(name, hoursStreamed, averageViewers, viewerPeak, hoursWatched);
+      this.streamers[name] = streamerData;
     },
     async getStreamerDataFromApi(name: string): Promise<StreamerData | null> {
       this.updates.add(name.toLowerCase());
@@ -99,10 +103,12 @@ export default defineComponent({
           return null;
         }
 
+        console.log(response);
+
         const minutesStreamed = response?.minutes_streamed ?? 0;
         const hoursStreamed = minutesStreamed / 60;
         const averageViewers = response?.avg_viewers ?? 0;
-        const viewerPeak = response?.viewer_peak ?? 0;
+        const viewerPeak = response?.max_viewers ?? 0;
         const hoursWatched = response?.hours_watched ?? 0;
         return new StreamerData(name, hoursStreamed, averageViewers, viewerPeak, hoursWatched);
       } catch (e) {
@@ -114,7 +120,20 @@ export default defineComponent({
     }
   },
   mounted() {
-    this.streamers = localStorage.getItem("streamers") ? this.streamers = JSON.parse(localStorage.getItem("streamers")!) : {};
+    const streamersData = localStorage.getItem("streamers") ?? "{}";
+    const parsedData = JSON.parse(streamersData);
+    for (const [name, data] of Object.entries(parsedData)) {
+      const entry = data as { hoursStreamed: number, averageViewers: number, viewerPeak: number, hoursWatched: number };
+      if (!name) continue;
+      this.streamers[name] = new StreamerData(
+        name,
+        entry.hoursStreamed ?? 0,
+        entry?.averageViewers ?? 0,
+        entry?.viewerPeak ?? 0,
+        entry?.hoursWatched ?? 0,
+      );
+    }
+
     setInterval(() => {
       for (const streamer of Object.values(this.streamers)) {
         // update streamer data if last check was more than 30 minutes ago
